@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Monochrome Arbor
 
-## Getting Started
+触れて、つながる。白と黒の幾何学で描く、インタラクティブな木の作品です。
 
-First, run the development server:
+3つの成長点が異なるリズムで枝を伸ばし、やがて枝同士が接続してひとつの森になります。接続は両端から伸び、出会った瞬間に光の輪が広がります。接続後は成長点同士が信号を送り合い、応答が戻ります。背景は黒を基調に、白背景へ反転できます。
+
+## 起動
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+[http://localhost:3000](http://localhost:3000) を開いてください。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 操作
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **ノードをクリック／タップ**：そのノードへ信号を送り、役割に応じた振る舞いを引き起こします。ホバー／タップしたノードの役割は、画面の隅に控えめに表示されます。
+- **余白をクリック／タップ**：近くの枝から新しい枝が伸び、光と波紋が広がります。追加の枝も同じ通信網に入り、別の成長点の枝と接続することがあります。
+- **生成方法**：画面下の名前を押すと、3種類の育ち方を選べます。
+- **新しい木**：選択中の生成方法で、別のランダムな種から育て直します。
+- **一時停止・再開／白黒反転**：木の形を保ったまま切り替えます。一時停止中に木へ触れると成長を再開します。
+- **全画面表示**：右上のアイコンから切り替えます（対応ブラウザー）。
 
-## Learn More
+木にキーボードのフォーカスを合わせると、矢印キーで役割を持つノードを選び、Enterで信号を送れます。スペースは新しい枝を育てます。生成方法の選択はTab・Enterで操作でき、Escapeで閉じられます。OSの「視差効果を減らす」設定では、成長と光のアニメーションを省略して完成形を表示します。ノードの選択と枝の追加は引き続き使えます。
 
-To learn more about Next.js, take a look at the following resources:
+## 3種類の生成方法
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| 方法 | 育ち方 |
+| --- | --- |
+| Canopy | 空間を再帰的に分け、丸い樹冠へ枝を広げる |
+| Spire | 中心の幹から、交互の段と上向きの小枝を積み重ねる |
+| Rhizome | 周囲に分布する引力点を探しながら、非対称に枝を伸ばす |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+どの方法も種によって形が変わります。枝は45度・90度の線で接続され、近くの別の枝と一部がつながります。クリックで追加する枝も同じ接続構造に入り、光の伝わり方が変化します。
 
-## Deploy on Vercel
+## ノードの役割
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+図形はノードの役割を表し、流れてきた信号の強さ・数・送り出す時刻を実際に変えます。
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| 役割 | 図形 | 振る舞い |
+| --- | --- | --- |
+| 発振 | 二重の菱形 | 周期的に信号を送り、接続先の成長点からの通信に応答する |
+| 中継 | 小さな四角 | 隣接する枝へ信号を受け渡す |
+| 増幅 | 三角と山形 | 信号を1.65倍に強める。光の太さと明るさが増す |
+| 集約 | 内向きの線を持つ六角形 | 短い時間窓で信号を集め、同じ宛先の信号をひとつに束ねる |
+| 蓄積 | 円と2枚の板 | 信号を蓄え、閾値または待ち時間に達すると放出する。外周の弧が蓄積量を示す |
+| 分岐 | Y字を持つ菱形 | 信号の強さを分けて複数の枝へ送る |
+| 開閉 | 扉を持つ四角 | 周期的に開閉し、閉じている間の信号を待たせる |
+| 反響 | 重なる円弧 | 遅れて弱い信号を送り返し、枝に余韻をつくる |
+
+信号は描き終わった枝だけを通り、各ノードへ届いてから次の動作を起こします。成長点同士の通信は、同じ経路上でもノードによる待ち時間や増幅を受けます。往路の光点と復路の菱形が、接続を挟んで行き来します。これはブラウザー内で動くシミュレーションです。
+
+## 実装と確認
+
+Next.js / React / TypeScript、Canvas 2D。描画と生成を分け、毎フレームの処理はReactの再描画を伴いません。非表示タブでは描画と時間を止め、一時停止・動きを減らす設定では変更時だけ再描画します。成長は1,000節点、同時に移動する信号は240個までに制限し、待機信号と伝播回数にも上限を設けています。成長の上限に達してもノードへの信号送信は使えます。
+
+- `src/lib/arbor.ts`：種からの生成、回路の経路、接続、クリックによる成長
+- `src/lib/arbor-signals.ts`：ノードごとの状態、信号の到着・待機・放出、成長点間の往復通信
+- `src/lib/arbor-renderer.ts`：複数点からの成長、接続・信号・蓄積量の描画、入力
+- `src/components/ProceduralArbor.tsx`：小さなコントロールとアクセシビリティ
+
+```bash
+npm test
+npm run lint
+npm run build
+```
+
+テストにはNode.js 22.6以降が必要です。複数の種に対して生成の決定性、成長点同士の接続、回路の角度、座標の範囲、クリック成長、節点数の上限を確認します。信号のテストでは各役割の実際の出力・待ち時間、接続前の通信禁止、往復通信、長時間実行の上限も確認します。
