@@ -36,6 +36,7 @@ export interface ArborNode extends Point {
   radius: number;
   role: NodeRole;
   origin: number;
+  readonly manual?: boolean;
 }
 
 export interface ArborEdge {
@@ -54,6 +55,21 @@ export interface ArborGraph {
   seed: number;
   mode: GrowthMode;
   roots: number[];
+}
+
+export type NodePlacementReason = "occupied" | "limit" | "bounds" | "unconnected" | null;
+
+export interface NodePlacementPlan {
+  point: Point;
+  /** The first neighbor is the parent, except for a new source. */
+  neighbors: number[];
+  valid: boolean;
+  reason: NodePlacementReason;
+}
+
+export interface NodePlacementResult {
+  nodeId: number | null;
+  reason: NodePlacementReason;
 }
 
 type Random = () => number;
@@ -136,6 +152,64 @@ function addEdge(garden: Garden, from: number, to: number, bridge = false) {
 
 function clearSpace(graph: ArborGraph, point: Point, spacing: number) {
   return !graph.nodes.some((node) => distance(node, point) < spacing);
+}
+
+/** Preview an exact placement and its local connections without changing the grove. */
+export function planNodePlacement(graph: ArborGraph, target: Point, role: NodeRole): NodePlacementPlan {
+  const point = { x: target.x, y: target.y };
+  const reject = (reason: NodePlacementReason): NodePlacementPlan => ({ point, neighbors: [], valid: false, reason });
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || !inside(point, 330)) return reject("bounds");
+  if (graph.nodes.length >= MAX_NODES) return reject("limit");
+  if (!clearSpace(graph, point, 12)) return reject("occupied");
+
+  const candidates = graph.nodes
+    .map((node) => ({ node, gap: distance(node, point), angle: Math.atan2(node.y - point.y, node.x - point.x) }))
+    .sort((a, b) => a.gap - b.gap || a.node.id - b.node.id);
+  if (!candidates.length) {
+    return role === "source" ? { point, neighbors: [], valid: true, reason: null } : reject("unconnected");
+  }
+
+  const chosen = [candidates[0]];
+  const count = role === "splitter" || role === "collector" ? 3 : 2;
+  // The nearest trace always anchors the component. Additional traces stay local;
+  // angular spread and other colonies make the connection legible and useful.
+  const nearby = candidates.slice(1).filter((candidate) => candidate.gap <= 250);
+  while (chosen.length < count && nearby.length) {
+    const origins = new Set(chosen.map((candidate) => candidate.node.origin));
+    const score = (candidate: typeof candidates[number]) => {
+      const separation = Math.min(...chosen.map((neighbor) => Math.acos(Math.cos(candidate.angle - neighbor.angle))));
+      return candidate.gap + (1 - separation / Math.PI) * 32 - (origins.has(candidate.node.origin) ? 0 : 20);
+    };
+    nearby.sort((a, b) => score(a) - score(b) || a.node.id - b.node.id);
+    chosen.push(nearby.shift()!);
+  }
+
+  return { point, neighbors: chosen.map((candidate) => candidate.node.id), valid: true, reason: null };
+}
+
+/** Add one chosen component, preserving every existing node, trace, and origin. */
+export function placeNode(graph: ArborGraph, target: Point, role: NodeRole, seed: number): NodePlacementResult {
+  // Recompute at commit time: a preview may have become occupied or hit the limit.
+  const plan = planNodePlacement(graph, target, role);
+  if (!plan.valid) return { nodeId: null, reason: plan.reason };
+
+  const id = graph.nodes.length;
+  const parent = role === "source" ? null : plan.neighbors[0];
+  const garden = { graph, random: seededRandom(seed ^ graph.seed ^ id) };
+  graph.nodes.push({
+    id,
+    parent,
+    ...plan.point,
+    depth: parent === null ? 0 : graph.nodes[parent].depth + 1,
+    kind: Math.floor(garden.random() * 6),
+    radius: 6.2,
+    role,
+    origin: parent === null ? id : graph.nodes[parent].origin,
+    manual: true,
+  });
+  if (parent === null) graph.roots.push(id);
+  for (const neighbor of plan.neighbors) addEdge(garden, neighbor, id, neighbor !== parent);
+  return { nodeId: id, reason: null };
 }
 
 function addNode(garden: Garden, parent: number | null, point: Point, spacing = 10): number | null {

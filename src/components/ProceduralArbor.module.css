@@ -5,7 +5,7 @@
   position: relative;
   width: 100%;
   height: 100svh;
-  min-height: 360px;
+  min-height: 320px;
   overflow: hidden;
   isolation: isolate;
   color: var(--ink);
@@ -16,79 +16,57 @@
 .canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; -webkit-tap-highlight-color: transparent; }
 .canvas:focus-visible { outline: 1px solid var(--muted); outline-offset: -8px; }
 .header { position: absolute; inset: max(26px, env(safe-area-inset-top)) 38px auto; display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
-.identity { display: flex; gap: 14px; align-items: center; opacity: .8; }
-.mark { width: 29px; height: 32px; fill: none; stroke: currentColor; stroke-width: .9; }
-.identity h1 { font-size: 10px; font-weight: 400; letter-spacing: .22em; line-height: 1.7; }
-.identity h1 span { display: block; font-size: 12px; letter-spacing: .35em; }
-.fullscreen, .iconButton, .regenerate, .modeButton { display: flex; align-items: center; justify-content: center; height: 44px; border: 0; background: transparent; color: var(--muted); cursor: pointer; transition: color 180ms, background 180ms; -webkit-tap-highlight-color: transparent; }
-.fullscreen { pointer-events: auto; width: 44px; opacity: .6; }
+.identity { opacity: .6; }
+.mark { display: block; width: 25px; height: 29px; fill: none; stroke: currentColor; stroke-width: .9; }
+.fullscreen, .iconButton { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; transition: color 180ms, background 180ms; -webkit-tap-highlight-color: transparent; }
+.fullscreen { pointer-events: auto; opacity: .6; }
 .fullscreen:hover { opacity: 1; }
-.fullscreen svg, .iconButton svg, .regenerate svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
-.iconButton { width: 42px; border-radius: 50%; }
-.iconButton:hover, .regenerate:hover, .modeButton:hover, .fullscreen:hover { color: var(--ink); }
-.iconButton:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
-.iconButton[aria-pressed="true"] { color: var(--ink); }
-.edition { position: absolute; left: 38px; bottom: 35px; display: flex; align-items: center; gap: 9px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
-.edition > span:not(.liveDot) { opacity: .4; margin-inline: 2px; }
-.liveDot { width: 3px; height: 3px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px currentColor; }
-.liveDot[data-paused="true"] { opacity: .35; box-shadow: none; }
-.inspector { position: absolute; left: 38px; bottom: 81px; width: min(245px, 24vw); padding-left: 13px; border-left: 1px solid color-mix(in srgb, var(--ink) 24%, transparent); opacity: 0; transform: translateY(4px); transition: opacity 220ms, transform 220ms; pointer-events: none; }
+.fullscreen svg, .iconButton svg, .modeMenu svg, .rolePalette svg, .inspector svg, .placementHint svg { width: 19px; height: 19px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
+.iconButton:hover, .fullscreen:hover { color: var(--ink); }
+.iconButton:hover, .iconButton[aria-expanded="true"], .iconButton[aria-pressed="true"] { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.iconButton[aria-pressed="true"], .iconButton[aria-expanded="true"] { color: var(--ink); }
+.inspector { position: absolute; left: 38px; bottom: 36px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; letter-spacing: .14em; opacity: 0; transform: translateY(4px); transition: opacity 220ms, transform 220ms; pointer-events: none; }
 .inspector[data-active="true"] { opacity: 1; transform: translateY(0); }
-.inspectorTitle { display: flex; align-items: center; gap: 12px; }
-.inspectorTitle strong { font-size: 11px; font-weight: 400; letter-spacing: .13em; }
-.inspectorTitle span { color: var(--muted); font: 8px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; }
-.inspectorDescription { margin-top: 7px; color: var(--muted); font-size: 10px; line-height: 1.9; letter-spacing: .035em; overflow-wrap: anywhere; }
+.inspector svg { width: 17px; height: 17px; }
 .footer { position: absolute; bottom: max(23px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); }
-.instruction { width: max-content; max-width: calc(100vw - 40px); margin: 0 auto 22px; color: var(--muted); text-align: center; font-size: 11px; font-weight: 400; letter-spacing: .18em; transition: opacity 1200ms; pointer-events: none; }
-.instruction span { display: block; max-width: 38em; margin-top: 9px; font-size: 10px; line-height: 1.8; letter-spacing: .04em; text-wrap: balance; }
-.instruction[data-touched="true"] { opacity: 0; }
-.controls { display: flex; align-items: center; gap: 3px; padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(16px); }
-.modePicker { position: relative; }
-.modeButton { gap: 10px; padding: 0 10px; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
-.modeNumber { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9px; opacity: .5; }
-.modeButton > svg { width: 10px; height: 10px; margin-left: 4px; fill: none; stroke: currentColor; stroke-width: 1; transition: transform 200ms; }
-.modeButton > svg[data-open="true"] { transform: rotate(180deg); }
-.divider { height: 15px; width: 1px; margin: 0 8px; background: color-mix(in srgb, var(--ink) 12%, transparent); }
-.regenerate { gap: 9px; padding: 0 12px 0 5px; white-space: nowrap; font-size: 10px; letter-spacing: .06em; }
+.controls { display: flex; align-items: center; gap: 2px; padding: 3px 5px; border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(16px); }
+.picker { position: relative; }
+.divider { height: 14px; width: 1px; margin: 0 3px; background: color-mix(in srgb, var(--ink) 12%, transparent); }
 .regenerate:hover svg { transform: rotate(-35deg); }
-.regenerate svg { transition: transform 350ms; }
-.modeMenu { position: absolute; bottom: calc(100% + 15px); left: -9px; width: 265px; padding: 12px 7px 7px; border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--paper) 96%, transparent); box-shadow: 0 12px 60px #0002; backdrop-filter: blur(24px); animation: appear 180ms ease-out; }
-.modeMenu > p { padding: 6px 13px 13px; color: var(--muted); font-size: 8px; letter-spacing: .18em; }
-.modeMenu button { display: flex; align-items: center; width: 100%; gap: 15px; border: 0; border-radius: 3px; padding: 13px; color: var(--muted); background: none; text-align: left; cursor: pointer; }
-.modeMenu button:hover, .modeMenu button[aria-pressed="true"] { color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, transparent); }
-.menuIndex { align-self: flex-start; padding-top: 2px; font: 9px ui-monospace, monospace; opacity: .5; }
-.modeMenu strong { font-size: 11px; font-weight: 400; letter-spacing: .1em; text-transform: uppercase; }
-.modeMenu small { display: block; margin-top: 6px; font-size: 10px; color: var(--muted); }
-.selectedDot { width: 3px; height: 3px; border-radius: 50%; background: currentColor; margin-left: auto; opacity: 0; }
+.regenerate svg, .addButton svg { transition: transform 250ms; }
+.addButton[aria-pressed="true"] svg { transform: rotate(45deg); }
+.modeMenu, .rolePalette { position: absolute; bottom: calc(100% + 14px); padding: 6px; border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--paper) 96%, transparent); box-shadow: 0 12px 45px #0002; backdrop-filter: blur(24px); animation: appear 180ms ease-out; }
+.modeMenu { left: -6px; width: 174px; }
+.modeMenu button { display: flex; align-items: center; min-height: 44px; width: 100%; gap: 12px; border: 0; border-radius: 4px; padding: 10px; color: var(--muted); background: none; text-align: left; font-size: 10px; letter-spacing: .075em; cursor: pointer; }
+.modeMenu button:hover, .modeMenu button[aria-pressed="true"], .roleButton:hover, .roleButton:focus-visible { color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.selectedDot { width: 3px; height: 3px; flex-shrink: 0; border-radius: 50%; background: currentColor; margin-left: auto; opacity: 0; }
 .modeMenu button[aria-pressed="true"] .selectedDot { opacity: 1; }
+.rolePalette { display: grid; grid-template-columns: repeat(4, 46px); gap: 3px; left: 50%; transform: translateX(-50%); }
+.roleButton { position: relative; display: flex; align-items: center; justify-content: center; width: 46px; height: 50px; padding: 0; border: 0; border-radius: 4px; color: var(--muted); background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.roleButton svg { width: 24px; height: 24px; transition: transform 180ms; }
+.roleButton span { position: absolute; bottom: 4px; font-size: 9px; letter-spacing: .12em; opacity: 0; transition: opacity 180ms; }
+.roleButton:hover svg, .roleButton:focus-visible svg { transform: translateY(-5px); }
+.roleButton:hover span, .roleButton:focus-visible span { opacity: 1; }
+.placementHint { position: absolute; bottom: calc(100% + 17px); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 10px; letter-spacing: .14em; white-space: nowrap; pointer-events: none; animation: appear 180ms ease-out; }
+.placementHint svg { width: 19px; height: 19px; }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-@keyframes appear { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-@media (max-width: 900px) {
-  .inspector { top: max(98px, calc(env(safe-area-inset-top) + 72px)); bottom: auto; width: 245px; }
-}
+@keyframes appear { from { opacity: 0; translate: 0 5px; } to { opacity: 1; translate: 0 0; } }
 @media (max-width: 650px) {
-  .header { inset: max(22px, env(safe-area-inset-top)) 20px auto; }
-  .identity { gap: 10px; }
-  .identity h1 { font-size: 8px; }
-  .identity h1 span { font-size: 10px; }
-  .mark { width: 25px; height: 28px; }
-  .edition { top: max(36px, calc(env(safe-area-inset-top) + 14px)); right: 78px; left: auto; bottom: auto; font-size: 8px; }
-  .edition .liveDot { display: none; }
-  .inspector { left: 20px; top: max(88px, calc(env(safe-area-inset-top) + 66px)); max-width: calc(100vw - 40px); }
-  .controls { padding-inline: 5px; gap: 0; }
-  .modeButton { gap: 7px; padding-inline: 8px; }
-  .divider { margin-inline: 6px; }
-  .iconButton { width: 39px; }
-  .regenerate { padding-right: 8px; gap: 7px; }
-  .instruction { margin-bottom: 20px; }
+  .header { inset: max(18px, env(safe-area-inset-top)) 20px auto; }
+  .mark { width: 23px; height: 26px; }
+  .inspector { left: 20px; top: max(78px, calc(env(safe-area-inset-top) + 62px)); bottom: auto; }
+  .footer { bottom: max(18px, env(safe-area-inset-bottom)); }
 }
 @media (max-height: 540px) {
-  .header { top: 15px; }
-  .footer { bottom: 12px; }
-  .instruction { display: none; }
-  .edition { bottom: 28px; }
+  .header { top: max(12px, env(safe-area-inset-top)); }
+  .footer { bottom: max(12px, env(safe-area-inset-bottom)); }
+  .inspector { top: max(68px, calc(env(safe-area-inset-top) + 54px)); bottom: auto; }
+}
+@media (hover: none) {
+  .roleButton svg { transform: translateY(-5px); }
+  .roleButton span { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .shell, .instruction, .inspector, .regenerate svg, .modeButton > svg { transition: none; }
-  .modeMenu { animation: none; }
+  .shell, .inspector, .regenerate svg, .addButton svg, .roleButton svg, .roleButton span { transition: none; }
+  .modeMenu, .rolePalette, .placementHint { animation: none; }
 }

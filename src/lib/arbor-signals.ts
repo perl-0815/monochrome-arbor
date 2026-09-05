@@ -271,12 +271,14 @@ export class ArborSignals {
     const exits = this.exits(id, local);
     for (const exit of this.rotate(id, exits).slice(0, 2)) this.send(id, exit, { ...local, energy: 0.85 });
 
-    const destinations = this.graph.roots.filter((root) => root !== id && Number.isFinite(this.distances(root)[id]));
-    if (destinations.length) {
-      const destination = destinations[runtime.beats % destinations.length];
+    // Inspect one reachable origin per beat. Newly placed sources can invalidate
+    // routes frequently; eagerly mapping every origin would stall a growth frame.
+    for (let checked = 0; checked < this.graph.roots.length; checked++) {
+      const destination = this.graph.roots[runtime.beats++ % this.graph.roots.length];
+      if (destination === id || !Number.isFinite(this.distances(destination)[id])) continue;
       this.forward(id, { ...this.message(1.3), destination, request: id });
+      break;
     }
-    runtime.beats++;
     this.schedule("source", id, this.time + 2.2 + (id % 5) * 0.11);
   }
 

@@ -1,4 +1,4 @@
-import { generateArbor, growToward, type ArborEdge, type ArborGraph, type ArborNode, type GrowthMode, type NodeRole, type Point } from "./arbor";
+import { generateArbor, growToward, planNodePlacement, placeNode, NODE_ROLES, type NodePlacementPlan, type ArborEdge, type ArborGraph, type ArborNode, type GrowthMode, type NodeRole, type Point } from "./arbor";
 
 import { ArborSignals, type NodeSignalState } from "./arbor-signals";
 
@@ -17,11 +17,18 @@ export class ArborRenderer {
   private onInteraction: () => void;
   private graph: ArborGraph;
   private births: number[] = [];
+  private edgeStarts = new Map<number, number>();
+  private knownNodes = 0;
   private children: number[] = [];
   private signals: ArborSignals | null = null;
   private onInspect: (selection: Selection) => void;
   private inspected = -1;
   private lastTelemetry = -1;
+  private placementRole: NodeRole | null = null;
+  private placementPoint: Point = { x: 0, y: 60 };
+  private placementPlan: NodePlacementPlan | null = null;
+  private onPlacement: (role: NodeRole | null) => void;
+  private onNotice: (message: string) => void;
   private ripples: Ripple[] = [];
   private observer: ResizeObserver;
   private motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -44,11 +51,13 @@ export class ArborRenderer {
   private previousImage: HTMLCanvasElement | null = null;
   private transition = 0;
 
-  constructor(canvas: HTMLCanvasElement, onInteraction: () => void, onInspect: (selection: Selection) => void) {
+  constructor(canvas: HTMLCanvasElement, onInteraction: () => void, onInspect: (selection: Selection) => void, onPlacement: (role: NodeRole | null) => void = () => {}, onNotice: (message: string) => void = () => {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d", { alpha: false })!;
     this.onInteraction = onInteraction;
     this.onInspect = onInspect;
+    this.onPlacement = onPlacement;
+    this.onNotice = onNotice;
     this.graph = { nodes: [], edges: [], roots: [], seed: 0, mode: "canopy" };
     this.observer = new ResizeObserver(this.resize);
     this.observer.observe(canvas);
@@ -69,7 +78,13 @@ export class ArborRenderer {
       this.previousImage.height = this.canvas.height;
       this.previousImage.getContext("2d")?.drawImage(this.canvas, 0, 0);
     }
+    this.setPlacementRole(null);
+    this.onPlacement(null);
+    delete this.canvas.dataset.lastPlaced;
+    delete this.canvas.dataset.lastPlacedRole;
     this.graph = generateArbor(freshSeed(), mode);
+    this.edgeStarts.clear();
+    this.knownNodes = this.graph.nodes.length;
     this.fitScene(true);
     this.births = this.graph.nodes.map((node) => node.parent === null ? this.graph.roots.indexOf(node.id) * 0.45 : Infinity);
     for (const edge of this.graph.edges) {
@@ -92,17 +107,106 @@ export class ArborRenderer {
   setPaused(value: boolean) { this.paused = value; this.dirty = true; }
   setLight(value: boolean) { this.light = value; this.previousImage = null; this.dirty = true; }
 
+  setPlacementRole(role: NodeRole | null) {
+    if (this.placementRole === role) return;
+    this.placementRole = role;
+    this.canvas.dataset.placement = role ?? "";
+    this.inspect(-1);
+    if (role) {
+      const candidates = [this.pointer, { x: 0, y: 60 }, { x: -135, y: 120 }, { x: 135, y: 120 }, { x: 0, y: -30 }].filter((point): point is Point => point !== null);
+      this.placementPoint = candidates.find((point) => planNodePlacement(this.graph, point, role).valid) ?? candidates[0];
+      this.updatePlacement();
+    } else {
+      this.placementPlan = null;
+      delete this.canvas.dataset.placementValid;
+      delete this.canvas.dataset.previewX;
+      delete this.canvas.dataset.previewY;
+    }
+    this.dirty = true;
+  }
+
+  private updatePlacement() {
+    if (!this.placementRole) return;
+    this.placementPlan = planNodePlacement(this.graph, this.placementPoint, this.placementRole);
+    this.canvas.dataset.placementValid = String(this.placementPlan.valid);
+    this.canvas.dataset.previewX = String(this.center.x + this.placementPoint.x * this.scale);
+    this.canvas.dataset.previewY = String(this.center.y + this.placementPoint.y * this.scale);
+    this.dirty = true;
+  }
+
+  private placeAt(point: Point) {
+    const role = this.placementRole;
+    if (!role) return;
+    this.placementPoint = point;
+    const result = placeNode(this.graph, point, role, freshSeed());
+    if (result.nodeId === null) {
+      this.updatePlacement();
+      const messages = {
+        occupied: "ノードから少し離れた場所を選んでください。",
+        bounds: "木の周辺の余白に配置できます。",
+        limit: "ノードの数が上限に達しました。",
+        unconnected: "接続できる枝がありません。",
+      };
+      this.onNotice(messages[result.reason ?? "occupied"]);
+      return;
+    }
+    const id = result.nodeId;
+    const node = this.graph.nodes[id];
+    // Wake each attachment's parent chain before extending a hand-placed component.
+    const attachments = this.graph.edges.filter((edge) => edge.to === id || edge.from === id);
+    for (const edge of attachments) {
+      let ancestor: number | null = edge.from === id ? edge.to : edge.from;
+      const chain: number[] = [];
+      while (ancestor !== null && this.births[ancestor] > this.time) {
+        chain.unshift(ancestor);
+        ancestor = this.graph.nodes[ancestor].parent;
+      }
+      let arrival = this.time;
+      for (const parent of chain) this.births[parent] = Math.min(this.births[parent], arrival += 0.1);
+    }
+    const parentEdge = attachments.find((edge) => !edge.bridge && edge.to === id);
+    this.births[id] = this.reduced ? this.time : parentEdge
+      ? Math.max(this.time, this.births[parentEdge.from]) + Math.min(1.6, parentEdge.length / 140) + 0.12
+      : this.time + 0.12;
+    this.paused = false;
+    this.onInteraction();
+    this.rebuildConnections();
+    this.fitScene(false);
+    this.signals?.step(this.time);
+    this.signals?.inject(id, 1.3);
+    if (!this.reduced) {
+      this.ripples.push({ point, start: this.time });
+      if (this.ripples.length > 8) this.ripples.shift();
+    }
+    this.setPlacementRole(null);
+    this.onPlacement(null);
+    this.inspect(id);
+    this.pointer = { x: node.x, y: node.y };
+    this.canvas.dataset.lastPlaced = String(id);
+    this.canvas.dataset.lastPlacedRole = role;
+    this.updateDescription();
+    this.onNotice(`${NODE_ROLES.find((item) => item.role === role)!.label}ノードを追加しました。`);
+    this.dirty = true;
+  }
+
   private updateDescription() {
     this.canvas.dataset.mode = this.graph.mode;
     this.canvas.dataset.nodes = String(this.graph.nodes.length);
     this.canvas.dataset.seed = String(this.graph.seed);
     this.canvas.dataset.roots = String(this.graph.roots.length);
+    this.canvas.dataset.manual = String(this.graph.nodes.filter((node) => node.manual).length);
     this.canvas.dataset.roles = JSON.stringify(this.graph.nodes.reduce<Record<string, number>>((counts, node) => { counts[node.role] = (counts[node.role] ?? 0) + 1; return counts; }, {}));
   }
 
   private rebuildConnections() {
     this.children = this.graph.nodes.map(() => 0);
-    for (const edge of this.graph.edges) if (!edge.bridge) this.children[edge.from]++;
+    for (const edge of this.graph.edges) {
+      if (!edge.bridge) {
+        this.children[edge.from]++;
+        if (edge.to >= this.knownNodes) this.edgeStarts.set(edge.id, Math.max(this.time, this.births[edge.from]));
+      }
+    }
+    this.knownNodes = this.graph.nodes.length;
     this.signals?.sync(this.graph, this.births);
   }
 
@@ -167,13 +271,39 @@ export class ArborRenderer {
   private move = (event: PointerEvent) => {
     if (event.pointerType === "touch") return;
     this.pointer = this.toWorld(event);
+    if (this.placementRole) {
+      this.placementPoint = this.pointer;
+      this.updatePlacement();
+      return;
+    }
     const id = this.nearest(this.pointer, true);
     this.inspect(distance(this.graph.nodes[id], this.pointer) < Math.max(18, 13 / this.scale) ? id : -1);
     this.dirty = true;
   };
   private leave = () => { this.pointer = null; this.inspect(-1); this.dirty = true; };
-  private click = (event: MouseEvent) => { this.touch(this.toWorld(event)); };
+  private click = (event: MouseEvent) => {
+    const point = this.toWorld(event);
+    if (this.placementRole) this.placeAt(point);
+    else this.touch(point);
+  };
   private keydown = (event: KeyboardEvent) => {
+    if (this.placementRole) {
+      if (!["Escape", "Enter", " ", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      if (event.key === "Escape") {
+        this.setPlacementRole(null);
+        this.onPlacement(null);
+        this.onNotice("配置を取り消しました。");
+      } else if (event.key.startsWith("Arrow")) {
+        const step = (event.shiftKey ? 36 : 12) / this.scale;
+        this.placementPoint = {
+          x: clamp(this.placementPoint.x + (event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0), -428, 428),
+          y: clamp(this.placementPoint.y + (event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0), -316, 330),
+        };
+        this.updatePlacement();
+      } else if (!event.repeat) this.placeAt(this.placementPoint);
+      return;
+    }
     if (event.repeat || !["Enter", " ", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
     event.preventDefault();
     if (event.key.startsWith("Arrow")) {
@@ -294,9 +424,9 @@ export class ArborRenderer {
     ctx.stroke();
   }
 
-  private drawNode(node: ArborNode, state?: NodeSignalState) {
+  private drawNode(node: ArborNode, state?: NodeSignalState, preview = false) {
     const ctx = this.ctx;
-    const age = this.time - this.births[node.id];
+    const age = preview ? 2 : this.time - this.births[node.id];
     if (age < 0) return;
     const energy = clamp(state?.energy ?? 0, 0, 2);
     const charge = clamp(state?.charge ?? 0);
@@ -419,7 +549,7 @@ export class ArborRenderer {
 
   private drawRoots() {
     const ctx = this.ctx;
-    for (const [index, id] of this.graph.roots.entries()) {
+    for (const id of this.graph.roots) {
       const root = this.graph.nodes[id];
       if (this.time < this.births[id]) continue;
       const energy = clamp(this.signals?.nodeStates[id]?.energy ?? 0);
@@ -430,10 +560,6 @@ export class ArborRenderer {
       this.polygon(root.x, root.y, 19, 4); ctx.stroke();
       ctx.strokeStyle = this.ink(0.1 + energy * 0.12);
       this.circle(root.x, root.y, 27 + energy * 3); ctx.stroke();
-      ctx.fillStyle = this.ink(0.4);
-      ctx.font = "8px ui-monospace, monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(["I", "II", "III"][index] ?? String(index + 1), root.x, root.y + 49);
     }
   }
 
@@ -480,6 +606,41 @@ export class ArborRenderer {
     }
   }
 
+  private drawPlacement() {
+    const plan = this.placementPlan;
+    const role = this.placementRole;
+    if (!plan || !role) return;
+    const ctx = this.ctx;
+    const { x, y } = plan.point;
+    ctx.save();
+    ctx.lineWidth = Math.max(0.7, 0.5 / this.scale);
+    ctx.strokeStyle = this.ink(plan.valid ? 0.32 : 0.12);
+    ctx.setLineDash([4 / this.scale, 5 / this.scale]);
+    for (const id of plan.neighbors) {
+      const from = this.graph.nodes[id];
+      const dx = x - from.x;
+      const dy = y - from.y;
+      const diagonal = Math.min(Math.abs(dx), Math.abs(dy));
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(x - Math.sign(dx) * diagonal, y - Math.sign(dy) * diagonal);
+      ctx.lineTo(x, y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.globalAlpha = plan.valid ? 0.85 : 0.35;
+    this.drawNode({ id: -1, parent: null, origin: -1, depth: 0, kind: 0, x, y, radius: 6.2, role }, undefined, true);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = this.ink(plan.valid ? 0.45 : 0.3);
+    this.circle(x, y, Math.max(14, 10 / this.scale)); ctx.stroke();
+    if (!plan.valid) {
+      const r = 12 / this.scale;
+      ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r); ctx.stroke();
+    }
+    ctx.restore();
+    this.canvas.dataset.previewX = String(this.center.x + x * this.scale);
+    this.canvas.dataset.previewY = String(this.center.y + y * this.scale);
+  }
+
   private draw() {
     const ctx = this.ctx;
     const ratio = this.canvas.width / this.width;
@@ -497,8 +658,8 @@ export class ArborRenderer {
     for (const edge of this.graph.edges) {
       const fromBirth = this.births[edge.from];
       const toBirth = this.births[edge.to];
-      const start = edge.bridge ? Math.max(fromBirth, toBirth) + 0.3 : fromBirth;
-      const duration = edge.bridge ? 0.8 : Math.max(0.01, toBirth - fromBirth);
+      const start = edge.bridge ? Math.max(fromBirth, toBirth) + 0.3 : this.edgeStarts.get(edge.id) ?? fromBirth;
+      const duration = edge.bridge ? 0.8 : Math.max(0.01, toBirth - start);
       const progress = this.reduced ? 1 : clamp((this.time - start) / duration);
       if (!progress) continue;
       const depth = this.graph.nodes[edge.to].depth;
@@ -572,6 +733,7 @@ export class ArborRenderer {
         ctx.setLineDash([]);
       }
     }
+    this.drawPlacement();
     const grown = String(this.births.filter((birth) => birth <= this.time).length);
     if (this.canvas.dataset.grown !== grown) this.canvas.dataset.grown = grown;
     if (this.time - this.lastTelemetry > 0.25 || this.reduced) {
